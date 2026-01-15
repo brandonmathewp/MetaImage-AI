@@ -291,6 +291,7 @@
             padding: 1rem;
             border-radius: 8px;
             margin-bottom: 1rem;
+            font-weight: 500;
         }
 
         .success-message {
@@ -300,6 +301,7 @@
             padding: 1rem;
             border-radius: 8px;
             margin-bottom: 1rem;
+            font-weight: 500;
         }
 
         .gallery {
@@ -587,13 +589,35 @@
 
         // Utility functions
         function showError(message) {
-            elements.errorContainer.innerHTML = `<div class="error-message">${message}</div>`;
-            setTimeout(() => elements.errorContainer.innerHTML = '', 5000);
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error-message';
+            errorDiv.style.cursor = 'pointer';
+            errorDiv.textContent = message;
+            errorDiv.title = 'Click to dismiss';
+            errorDiv.addEventListener('click', () => errorDiv.remove());
+            
+            elements.errorContainer.innerHTML = '';
+            elements.errorContainer.appendChild(errorDiv);
+            console.error('Error:', message);
         }
 
         function showSuccess(message) {
-            elements.successContainer.innerHTML = `<div class="success-message">${message}</div>`;
-            setTimeout(() => elements.successContainer.innerHTML = '', 5000);
+            const successDiv = document.createElement('div');
+            successDiv.className = 'success-message';
+            successDiv.style.cursor = 'pointer';
+            successDiv.textContent = message;
+            successDiv.title = 'Click to dismiss';
+            successDiv.addEventListener('click', () => successDiv.remove());
+            
+            elements.successContainer.innerHTML = '';
+            elements.successContainer.appendChild(successDiv);
+            console.log('Success:', message);
+            
+            setTimeout(() => {
+                if (successDiv.parentNode) {
+                    successDiv.remove();
+                }
+            }, 5000);
         }
 
         function getAspectRatioDimensions(ratio) {
@@ -609,6 +633,8 @@
 
         // Event listeners
         elements.loadModelsBtn.addEventListener('click', loadModels);
+        console.log('Load Models button listener attached');
+        
         elements.generateBtn.addEventListener('click', generateImages);
 
         elements.safetyToggle.addEventListener('click', () => {
@@ -642,6 +668,8 @@
 
         // Load models from API
         async function loadModels() {
+            console.log('Load Models button clicked!');
+            
             const apiKey = elements.apiKeyInput.value.trim();
             
             if (!apiKey) {
@@ -654,34 +682,56 @@
             elements.loadModelsBtn.textContent = 'Loading...';
 
             try {
+                console.log('Fetching models from Venice API...');
+                
                 const response = await fetch('https://api.venice.ai/api/v1/models', {
+                    method: 'GET',
                     headers: {
-                        'Authorization': `Bearer ${apiKey}`
+                        'Authorization': `Bearer ${apiKey}`,
+                        'Content-Type': 'application/json'
                     }
                 });
 
+                console.log('Response status:', response.status);
+
                 if (!response.ok) {
-                    throw new Error(`Failed to load models: ${response.statusText}`);
+                    const errorText = await response.text();
+                    console.error('API Error:', errorText);
+                    
+                    if (response.status === 401) {
+                        throw new Error('Invalid API key. Please check your key and try again.');
+                    } else if (response.status === 429) {
+                        throw new Error('Rate limit exceeded. Please wait a moment and try again.');
+                    } else {
+                        throw new Error(`Failed to load models: ${response.status} ${response.statusText}`);
+                    }
                 }
 
                 const data = await response.json();
+                console.log('Models data:', data);
+                
+                if (!data.data || !Array.isArray(data.data)) {
+                    throw new Error('Invalid response format from API');
+                }
                 
                 // Filter for image models only
                 state.models = data.data.filter(model => model.type === 'image');
+                console.log('Image models found:', state.models.length);
                 
                 if (state.models.length === 0) {
-                    throw new Error('No image models available');
+                    throw new Error('No image models available. Your API key may not have access to image generation.');
                 }
 
                 displayModels();
                 elements.mainContent.classList.remove('hidden');
-                showSuccess('Models loaded successfully!');
+                showSuccess(`Successfully loaded ${state.models.length} image model(s)!`);
                 
                 // Store API key
                 localStorage.setItem('veniceApiKey', apiKey);
 
             } catch (error) {
-                showError(error.message);
+                console.error('Error loading models:', error);
+                showError(error.message || 'An unexpected error occurred. Check the browser console for details.');
             } finally {
                 elements.loadModelsBtn.disabled = false;
                 elements.loadModelsBtn.textContent = 'Load Models';
@@ -877,9 +927,19 @@
 
         // Load saved API key on page load
         window.addEventListener('DOMContentLoaded', () => {
+            console.log('MetaAI Image Generator initialized');
+            console.log('DOM elements found:', {
+                apiKeyInput: !!elements.apiKeyInput,
+                loadModelsBtn: !!elements.loadModelsBtn,
+                mainContent: !!elements.mainContent,
+                modelSelector: !!elements.modelSelector,
+                generateBtn: !!elements.generateBtn
+            });
+            
             const savedKey = localStorage.getItem('veniceApiKey');
             if (savedKey) {
                 elements.apiKeyInput.value = savedKey;
+                console.log('Loaded saved API key from localStorage');
             }
         });
 
